@@ -25,6 +25,7 @@ once with no duplicates.
   - [3. Frontend](#3-frontend)
   - [4. Google OAuth setup](#4-google-oauth-setup)
   - [5. Slack app setup](#5-slack-app-setup)
+- [Deployment](#deployment)
 - [Demo checklist](#demo-checklist)
 - [How scheduling works](#how-scheduling-works)
 - [How restart persistence works](#how-restart-persistence-works)
@@ -187,6 +188,26 @@ npm run dev                        # http://localhost:3000
    starts notifications again immediately, no redeploy needed, because the
    worker looks the integration up fresh from Postgres on every rate-limit
    hit (`src/services/slack.ts`) — if there's no row, it silently no-ops.
+
+## Deployment
+
+Not required for the assignment (repo + video is enough), but if you want a
+live link, everything is pre-configured:
+
+**Backend (Postgres + Redis + API + worker) — Render**
+1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint** → connect this repo. Render reads `render.yaml` at the repo root and provisions the Postgres DB, Redis instance, the API web service, and the worker background service in one go.
+2. Render will prompt you to fill in the vars marked `sync: false` in `render.yaml` (`GOOGLE_CLIENT_ID`, `SLACK_CLIENT_ID`/`SECRET`, `FRONTEND_URL`, `BULL_BOARD_USER`, optionally `ELASTICSEARCH_NODE`). `FRONTEND_URL` can be filled in after step below once you have the Vercel URL.
+3. Note: Redis and the background worker need at least Render's "Starter" plan (see the comment at the top of `render.yaml`) — the free tier only covers a web service, and it isn't a good fit for an always-on worker anyway.
+
+**Frontend — Vercel**
+1. [vercel.com/new](https://vercel.com/new) → import this repo → set **Root Directory** to `frontend` (this repo is not a Next.js app at its root, so this step is required).
+2. Vercel auto-detects Next.js and picks up `frontend/vercel.json` for build settings/headers.
+3. Set env vars (Project Settings → Environment Variables): `NEXT_PUBLIC_API_URL` (your Render API URL), `NEXTAUTH_URL` (your Vercel URL), `NEXTAUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — same list as `frontend/.env.local.example`.
+
+**After both are live**
+- Update the Google OAuth Client's authorized redirect URI to `https://<your-vercel-domain>/api/auth/callback/google`.
+- Update the Slack app's redirect URL to `https://<your-render-api-domain>/api/slack/callback` (and make sure `SLACK_REDIRECT_URI` on Render matches).
+- Set `FRONTEND_URL` on the Render API service to your Vercel URL (needed for CORS).
 
 ## Demo checklist
 
