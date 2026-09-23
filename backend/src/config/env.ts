@@ -12,9 +12,12 @@ export const env = {
 
   databaseUrl: process.env.DATABASE_URL ?? "",
 
+  // Preferred for managed providers like Upstash: a single rediss:// URL.
+  redisUrl: process.env.REDIS_URL || undefined,
   redisHost: process.env.REDIS_HOST ?? "localhost",
   redisPort: num(process.env.REDIS_PORT, 6379),
   redisPassword: process.env.REDIS_PASSWORD || undefined,
+  redisTls: process.env.REDIS_TLS === "true",
 
   workerConcurrency: num(process.env.WORKER_CONCURRENCY, 5),
   minDelayBetweenEmailsMs: num(process.env.MIN_DELAY_BETWEEN_EMAILS_MS, 2000),

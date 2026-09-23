@@ -1,14 +1,14 @@
-# Render Blueprint — provisions Postgres, Redis, the API, and the BullMQ
-# worker in one shot. In the Render dashboard: New -> Blueprint -> select
-# this repo -> Render reads this file and creates everything below.
+# Render Blueprint — a genuinely $0 deployment path.
 #
-# NOTE on cost: Render's free tier only covers a Web Service (and it spins
-# down after 15 min idle, which is a bad fit for a worker that needs to be
-# always-on to process delayed jobs on time). Redis and Background Workers
-# require at least the "Starter" plan. Swap `plan: starter` -> `plan: free`
-# below only for the web service if you want to stay fully free and accept
-# the API cold-starting; the worker and Redis still need a paid plan to run
-# continuously.
+# Render's Redis and Background Worker service *types* require a paid
+# ("Starter"+) plan; only Web Services and this repo's Postgres have a real
+# free tier. So instead of separate API + worker services (see the comment
+# at the bottom for that topology, if you're on a paid plan), this runs
+# BOTH in a single free Web Service via `src/standalone.ts`, and expects an
+# external free Redis (Upstash's free tier works with zero code changes --
+# see the README's "Deployment" section for the two-minute setup).
+#
+# In the Render dashboard: New -> Blueprint -> select this repo.
 
 databases:
   - name: email-scheduler-db
@@ -17,81 +17,28 @@ databases:
     postgresMajorVersion: "16"
 
 services:
-  # --- Redis: backs BullMQ (the scheduler) and the rate-limit counters ---
-  - type: redis
-    name: email-scheduler-redis
-    plan: starter
-    ipAllowList: [] # only accessible from other services in this account
-
-  # --- Express API ---
   - type: web
-    name: email-scheduler-api
+    name: email-scheduler
     runtime: node
-    plan: starter
+    plan: free
     rootDir: backend
     buildCommand: npm install && npx prisma generate && npm run build
-    startCommand: npx prisma migrate deploy && npm start
+    startCommand: npx prisma migrate deploy && npm run start:standalone
     healthCheckPath: /healthz
-    envVars:
-      - fromGroup: email-scheduler-shared
-      - key: DATABASE_URL
-        fromDatabase:
-          name: email-scheduler-db
-          property: connectionString
-      - key: REDIS_HOST
-        fromService:
-          type: redis
-          name: email-scheduler-redis
-          property: host
-      - key: REDIS_PORT
-        fromService:
-          type: redis
-          name: email-scheduler-redis
-          property: port
-      - key: PORT
-        value: "4000"
-      # Set this to your deployed Vercel URL once you have it (CORS origin).
-      - key: FRONTEND_URL
-        sync: false
-      - key: SLACK_REDIRECT_URI
-        value: https://email-scheduler-api.onrender.com/api/slack/callback
-      - key: BULL_BOARD_USER
-        sync: false
-      - key: BULL_BOARD_PASSWORD
-        generateValue: true
-
-  # --- BullMQ worker (separate long-running process; scale replicas here
-  #     independently of the API for more send throughput) ---
-  - type: worker
-    name: email-scheduler-worker
-    runtime: node
-    plan: starter
-    rootDir: backend
-    buildCommand: npm install && npx prisma generate && npm run build
-    startCommand: npm run start:worker
-    envVars:
-      - fromGroup: email-scheduler-shared
-      - key: DATABASE_URL
-        fromDatabase:
-          name: email-scheduler-db
-          property: connectionString
-      - key: REDIS_HOST
-        fromService:
-          type: redis
-          name: email-scheduler-redis
-          property: host
-      - key: REDIS_PORT
-        fromService:
-          type: redis
-          name: email-scheduler-redis
-          property: port
-
-# Shared config between the API and worker so it's declared once.
-envVarGroups:
-  - name: email-scheduler-shared
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: email-scheduler-db
+          property: connectionString
+      # Paste your Upstash (or other free Redis) connection URL here --
+      # looks like rediss://default:<password>@<host>:<port>. Leave the
+      # REDIS_HOST/PORT/PASSWORD vars in .env.example unset when using this.
+      - key: REDIS_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: WORKER_CONCURRENCY
@@ -101,16 +48,37 @@ envVarGroups:
       - key: MAX_EMAILS_PER_HOUR_PER_SENDER
         value: "200"
       # Same Client ID the frontend uses — the backend verifies Google ID
-      # tokens against this audience. Fill in after creating your OAuth app.
+      # tokens against this audience.
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: SLACK_CLIENT_ID
         sync: false
       - key: SLACK_CLIENT_SECRET
         sync: false
+      - key: SLACK_REDIRECT_URI
+        value: https://email-scheduler.onrender.com/api/slack/callback
+      # Set this to your deployed Vercel URL once you have it (CORS origin).
+      - key: FRONTEND_URL
+        sync: false
+      - key: BULL_BOARD_USER
+        sync: false
+      - key: BULL_BOARD_PASSWORD
+        generateValue: true
       # Optional: point at a managed ES instance (e.g. Bonsai, Elastic
-      # Cloud). Leave unset and the app falls back to Postgres search.
+      # Cloud free trial). Leave unset and the app falls back to Postgres
+      # search automatically.
       - key: ELASTICSEARCH_NODE
         sync: false
       - key: ELASTICSEARCH_INDEX
         value: emails
+
+# --- Scaling up later ---
+# Once/if you're on a paid Render plan, split back into two services for
+# the "real" topology described in the README (worker scales independently
+# of API traffic): a `type: web` service with startCommand
+# `npx prisma migrate deploy && npm start`, and a `type: worker` service
+# with startCommand `npm run start:worker`, both pointed at the same
+# `DATABASE_URL` and `REDIS_URL`/Redis service. A free-tier note: this repo
+# no longer defines those two services directly since they can't deploy on
+# the free plan -- add them back in the Render dashboard, or ask for the
+# two-service blueprint again if you upgrade.

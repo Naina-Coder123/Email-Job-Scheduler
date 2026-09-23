@@ -192,12 +192,20 @@ npm run dev                        # http://localhost:3000
 ## Deployment
 
 Not required for the assignment (repo + video is enough), but if you want a
-live link, everything is pre-configured:
+live link, everything is pre-configured for a genuinely **free** deploy —
+Render's Redis and Background Worker service types are paid-plan-only, so
+the blueprint below runs the API and worker together in one process
+(`src/standalone.ts`) inside Render's free Web Service tier instead, paired
+with a free external Redis.
 
-**Backend (Postgres + Redis + API + worker) — Render**
-1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint** → connect this repo. Render reads `render.yaml` at the repo root and provisions the Postgres DB, Redis instance, the API web service, and the worker background service in one go.
-2. Render will prompt you to fill in the vars marked `sync: false` in `render.yaml` (`GOOGLE_CLIENT_ID`, `SLACK_CLIENT_ID`/`SECRET`, `FRONTEND_URL`, `BULL_BOARD_USER`, optionally `ELASTICSEARCH_NODE`). `FRONTEND_URL` can be filled in after step below once you have the Vercel URL.
-3. Note: Redis and the background worker need at least Render's "Starter" plan (see the comment at the top of `render.yaml`) — the free tier only covers a web service, and it isn't a good fit for an always-on worker anyway.
+**Redis — Upstash (free, ~2 minutes, no card required)**
+1. [console.upstash.com](https://console.upstash.com) → sign up → **Create Database** → any name/region, leave defaults.
+2. On the database page, copy the **`UPSTASH_REDIS_URL`** / "Redis Connect URL" — it looks like `rediss://default:<password>@<host>:<port>`.
+
+**Backend (Postgres + API + worker combined) — Render**
+1. [dashboard.render.com](https://dashboard.render.com) → **New** → **Blueprint** → connect this repo. Render reads `render.yaml` at the repo root and provisions the Postgres DB and the combined web service.
+2. Render will prompt you to fill in the vars marked `sync: false`: paste the Upstash URL from above into `REDIS_URL`, plus `GOOGLE_CLIENT_ID`, `SLACK_CLIENT_ID`/`SECRET`, `BULL_BOARD_USER`, and `FRONTEND_URL` (can be filled in after the Vercel step below).
+3. Free-tier trade-off worth knowing: a free Web Service spins down after 15 minutes of no traffic and takes ~30–50s to wake back up on the next request — fine for a demo link, not for production. Scaling up later (splitting the worker back into its own always-on service) is documented at the bottom of `render.yaml`.
 
 **Frontend — Vercel**
 1. [vercel.com/new](https://vercel.com/new) → import this repo → set **Root Directory** to `frontend` (this repo is not a Next.js app at its root, so this step is required).
