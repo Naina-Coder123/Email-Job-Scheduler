@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.next/
+out/
+build/
+
+.env
+.env.local
+.env.*.local
+!.env.example
+
+*.log
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+
+.DS_Store
+
+backend/prisma/dev.db
+backend/generated/
+
+# local infra data dirs (used only when running redis/postgres outside docker)
+.localdata/

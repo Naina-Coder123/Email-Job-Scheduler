@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  SCHEDULED
+  SENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id         String    @id @default(uuid())
+  googleId   String?   @unique
+  email      String    @unique
+  name       String?
+  avatarUrl  String?
+  createdAt  DateTime  @default(now())
+
+  senders    Sender[]
+  batches    EmailBatch[]
+  emails     Email[]
+  slack      SlackIntegration?
+}
+
+// A "from" identity emails are sent through. Backed by an Ethereal test SMTP
+// account so the assignment can be demoed without a real mail provider.
+model Sender {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  email       String
+  smtpHost    String
+  smtpPort    Int
+  smtpUser    String
+  smtpPass    String
+  hourlyLimit Int      @default(200)
+  createdAt   DateTime @default(now())
+
+  emails      Email[]
+
+  @@index([userId])
+}
+
+model SlackIntegration {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamName    String?
+  webhookUrl  String
+  accessToken String
+  createdAt   DateTime @default(now())
+}
+
+// One "compose" action -> one batch -> many Email rows (one per recipient).
+model EmailBatch {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  body        String   @db.Text
+  startTime   DateTime
+  delayMs     Int
+  hourlyLimit Int
+  totalCount  Int
+  createdAt   DateTime @default(now())
+
+  emails      Email[]
+}
+
+model Email {
+  id          String      @id @default(uuid())
+  batchId     String?
+  batch       EmailBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  senderId    String
+  sender      Sender      @relation(fields: [senderId], references: [id])
+  toEmail     String
+  subject     String
+  body        String      @db.Text
+  status      EmailStatus @default(SCHEDULED)
+  scheduledAt DateTime
+  sentAt      DateTime?
+  error       String?
+  attempts    Int         @default(0)
+  previewUrl  String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([userId, status])
+  @@index([scheduledAt])
+}

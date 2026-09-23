@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: email_scheduler
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/email_scheduler?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ELASTICSEARCH_NODE=http://elasticsearch:9200
+    ports:
+      - "4000:4000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy && node dist/index.js"
+
+  worker:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/email_scheduler?schema=public
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ELASTICSEARCH_NODE=http://elasticsearch:9200
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    command: node dist/worker.js
+
+volumes:
+  redis-data:
+  postgres-data:
+  es-data:
