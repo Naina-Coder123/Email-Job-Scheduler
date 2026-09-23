@@ -25,6 +25,7 @@ once with no duplicates.
   - [3. Frontend](#3-frontend)
   - [4. Google OAuth setup](#4-google-oauth-setup)
   - [5. Slack app setup](#5-slack-app-setup)
+- [Demo checklist](#demo-checklist)
 - [How scheduling works](#how-scheduling-works)
 - [How restart persistence works](#how-restart-persistence-works)
 - [How rate limiting & concurrency work](#how-rate-limiting--concurrency-work)
@@ -186,6 +187,26 @@ npm run dev                        # http://localhost:3000
    starts notifications again immediately, no redeploy needed, because the
    worker looks the integration up fresh from Postgres on every rate-limit
    hit (`src/services/slack.ts`) — if there's no row, it silently no-ops.
+
+## Demo checklist
+
+Steps to record the required demo video (max 5 min), in order:
+
+1. `http://localhost:3000` → **Continue with Google** → land on the dashboard.
+2. **Compose new email** → upload a small CSV of leads (or paste addresses) →
+   set the hourly limit low (e.g. `2`) so the rate limiter visibly kicks in →
+   **Schedule**.
+3. Show the **Scheduled emails** tab populate immediately.
+4. Wait ~10–15s, refresh → show rows move to **Sent**, click a row's
+   `Preview` link to open the real Ethereal inbox for that message.
+5. Show `http://localhost:4000/admin/queues` (Bull Board, `admin`/`admin`) —
+   live waiting/active/delayed/completed job counts.
+6. **Restart scenario** (the required one): `Ctrl+C` the worker terminal →
+   wait a few seconds → `npm run worker` again → point out the log line
+   `X scheduled email(s) found in DB, Y re-queued` → show those emails still
+   complete normally in Sent, with no duplicates.
+7. **(Bonus)** Connect Slack, schedule enough emails to exceed a sender's
+   hourly cap, and show the Slack message landing the moment the cap hits.
 
 ## How scheduling works
 
